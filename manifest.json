@@ -1,0 +1,16 @@
+{
+  "short_name": "ParkirPintar",
+  "name": "ParkirPintar - Lokasi Parkir",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2991/2991231.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "./index2.html",
+  "display": "standalone",
+  "theme_color": "#0d6efd",
+  "background_color": "#f8f9fa"
+}

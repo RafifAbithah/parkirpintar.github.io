@@ -1,1 +1,0 @@
-# parkirpintar.github.io

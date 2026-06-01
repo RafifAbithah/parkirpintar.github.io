@@ -1,0 +1,7 @@
+ body { background-color: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .main-card { border: none; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }
+        .img-preview { width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px; margin-bottom: 10px; border: 1px solid #ddd; }
+        #map { height: 200px; width: 100%; border-radius: 12px; margin-bottom: 15px; z-index: 1; }
+        .btn-park { padding: 12px; border-radius: 12px; font-weight: 600; }
+        .action-link { font-size: 0.85rem; cursor: pointer; text-decoration: none; color: #6c757d; transition: 0.2s; }
+        .action-link:hover { color: #0d6efd; }

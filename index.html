@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParkirPintar</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d6efd">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app" class="container mt-3 mb-5" style="max-width: 480px;">
+    <div class="text-center mb-3">
+        <h3 class="fw-bold text-primary"><i class="fas fa-parking"></i> ParkirPintar</h3>
+    </div>
+
+    <div class="card main-card">
+        <div class="card-body">
+            
+            <div v-if="!isParked">
+                <div class="mb-3 text-center">
+                    <div v-if="tempPhoto" class="position-relative">
+                        <img :src="tempPhoto" class="img-preview">
+                        <button @click="tempPhoto = null" class="btn btn-danger btn-sm position-absolute top-0 end-0 m-2 rounded-circle shadow">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div v-else class="p-4 border border-dashed rounded-3 bg-light" @click="triggerInput">
+                        <i class="fas fa-camera fa-2x text-muted mb-2"></i>
+                        <p class="small text-muted mb-0">Klik untuk Ambil Foto</p>
+                        <input type="file" id="fileInput" accept="image/*" capture="camera" @change="handleFileUpload" hidden>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Pilih Lantai</label>
+                    <select v-model="tempFloor" class="form-select border-0 bg-light shadow-sm">
+                        <option value="">-- Pilih Lantai (Opsional) --</option>
+                        <option v-for="f in ['B3','B2','B1','LG','GF','P1','P2','P3','P4']" :key="f" :value="f">Lantai {{f}}</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Catatan Detail</label>
+                    <textarea v-model="tempNote" class="form-control border-0 bg-light shadow-sm" rows="2" 
+                    placeholder="Contoh: Dekat lift, samping pilar kuning..."></textarea>
+                </div>
+
+                <button @click="saveLocation" :disabled="loading" class="btn btn-primary btn-park w-100 shadow">
+                    <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
+                    <i v-else class="fas fa-map-marker-alt me-2"></i> Simpan Lokasi Parkir
+                </button>
+            </div>
+
+            <div v-else>
+                <div id="map"></div>
+
+                <div v-if="parkingData.photo" class="text-center">
+                    <img :src="parkingData.photo" class="img-preview shadow-sm">
+                </div>
+
+                <div class="bg-light p-3 rounded-3 mb-3 border border-light-subtle">
+                    <div class="mb-2">
+                        <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.65rem;">Waktu Simpan</small>
+                        <span class="small">{{ parkingData.timestamp }}</span>
+                    </div>
+
+                    <div v-if="parkingData.floor" class="mb-2">
+                        <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.65rem;">Lantai / Level</small>
+                        <span class="badge bg-primary">Lantai {{ parkingData.floor }}</span>
+                    </div>
+
+                    <div v-if="parkingData.note">
+                        <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.65rem;">Catatan</small>
+                        <strong>{{ parkingData.note }}</strong>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button @click="openGoogleMaps" class="btn btn-success btn-park">
+                        <i class="fas fa-directions me-2"></i> Navigasi Google Maps
+                    </button>
+                </div>
+
+                <div class="d-flex justify-content-between mt-3 px-1">
+                    <span @click="copyCoords" class="action-link"><i class="far fa-copy me-1"></i> Salin Koordinat</span>
+                    <span @click="shareWA" class="action-link"><i class="fab fa-whatsapp me-1 text-success"></i> Share ke WA</span>
+                </div>
+
+                <hr>
+                <div class="text-center">
+                    <button @click="resetParking" class="btn btn-link text-danger text-decoration-none btn-sm">
+                        <i class="fas fa-undo me-1"></i> Reset / Selesai Parkir
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    const { createApp, ref, onMounted, nextTick } = Vue;
+
+    createApp({
+        setup() {
+            const isParked = ref(false);
+            const loading = ref(false);
+            const tempPhoto = ref(null);
+            const tempNote = ref('');
+            const tempFloor = ref('');
+            
+            const parkingData = ref({ 
+                lat: null, 
+                lng: null, 
+                photo: null, 
+                note: '', 
+                floor: '',
+                timestamp: '' 
+            });
+            
+            let map = null;
+
+            onMounted(() => {
+                const saved = localStorage.getItem('parkir_pro_v3');
+                if (saved) {
+                    parkingData.value = JSON.parse(saved);
+                    isParked.value = true;
+                    nextTick(() => initMap());
+                }
+            });
+
+            const triggerInput = () => document.getElementById('fileInput').click();
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => tempPhoto.value = ev.target.result;
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const initMap = () => {
+                if (map) map.remove();
+                map = L.map('map').setView([parkingData.value.lat, parkingData.value.lng], 17);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                L.marker([parkingData.value.lat, parkingData.value.lng]).addTo(map)
+                    .bindPopup('Posisi Mobil Kamu').openPopup();
+            };
+
+            const saveLocation = () => {
+                loading.value = true;
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    parkingData.value = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        photo: tempPhoto.value,
+                        note: tempNote.value,
+                        floor: tempFloor.value,
+                        timestamp: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+                    };
+                    localStorage.setItem('parkir_pro_v3', JSON.stringify(parkingData.value));
+                    isParked.value = true;
+                    loading.value = false;
+                    nextTick(() => initMap());
+                }, (err) => {
+                    alert("GPS Error: " + err.message);
+                    loading.value = false;
+                }, { enableHighAccuracy: true });
+            };
+
+            const openGoogleMaps = () => {
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${parkingData.value.lat},
+                ${parkingData.value.lng}&travelmode=walking`, '_blank');
+            };
+
+            const copyCoords = () => {
+                const text = `${parkingData.value.lat}, ${parkingData.value.lng}`;
+                navigator.clipboard.writeText(text);
+                alert("Koordinat berhasil disalin!");
+            };
+
+            const shareWA = () => {
+                const mapLink = `https://www.google.com/maps?q=${parkingData.value.lat},${parkingData.value.lng}`;
+                const floorInfo = parkingData.value.floor ? `\nLantai: ${parkingData.value.floor}` : '';
+                const text = `*Info Parkir Saya*\nWaktu: ${parkingData.value.timestamp}${floorInfo}\nCatatan: 
+                ${parkingData.value.note || '-'}\n\nLokasi Maps:\n${mapLink}`;
+                window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+            };
+
+            const resetParking = () => {
+                if(confirm("Hapus data lokasi ini?")) {
+                    localStorage.removeItem('parkir_pro_v3');
+                    location.reload();
+                }
+            };
+
+            return { 
+                isParked, loading, tempPhoto, tempNote, tempFloor, 
+                parkingData, handleFileUpload, triggerInput, 
+                saveLocation, openGoogleMaps, copyCoords, shareWA, resetParking 
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
